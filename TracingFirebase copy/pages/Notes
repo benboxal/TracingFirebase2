@@ -1,0 +1,93 @@
+import streamlit as st
+from google.cloud import firestore
+import pandas as pd
+import json
+from google.oauth2 import service_account
+from dateutil.rrule import rrule, DAILY
+from datetime import datetime, timedelta
+
+st.set_page_config(page_title="Inventory", page_icon="📈")
+
+loc_df = pd.read_csv('Lists/AspenLocations.csv')
+location = st.selectbox("Choose office", (loc_df))
+
+key_dict = json.loads(st.secrets['textkey'])
+creds = service_account.Credentials.from_service_account_info(key_dict)
+db = firestore.Client(credentials=creds)
+
+st.title('Report Generation')
+
+start_date = st.date_input("Select the start date")
+end_date = st.date_input("Select the end date")
+
+# Create a date range between start and end date
+date_range = pd.date_range(start_date, end_date, freq='D')
+# Select only weekdays
+weekdays = date_range[date_range.weekday < 5]
+
+st.write("Weekdays between the selected dates:")
+
+printer_list = db.collection(location + '/Machines/Printers')
+docs = printer_list.get()
+
+titles = []
+
+for date in weekdays:
+    weekday = ((date.strftime("%Y-%m-%d")))
+
+    st.markdown(weekday)
+
+#for doc in docs:
+#    titles.append(doc.to_dict()["Serial"])
+#    st.markdown(titles)
+
+
+
+
+
+
+
+
+
+
+
+
+
+report_data = db.collection(location + '/Survey Results/Printers').stream()
+
+report_list = list(map(lambda x: x.to_dict(), report_data))
+
+report_df = pd.DataFrame(report_list)
+
+sdf = report_df.reindex(sorted(report_df.columns), axis=1)
+sdf = sdf.drop("AC_ Location", axis = 1)
+sdf = sdf.drop("P_ Clean printer", axis = 1)
+sdf = sdf.drop("P_ Clean up resin", axis = 1)
+sdf = sdf.drop("P_ Inspect glass", axis = 1)
+sdf = sdf.rename(columns={"AA_ Date":"Date"})
+sdf = sdf.rename(columns={"AB_ Serial":"Serial"})
+sdf = sdf.rename(columns={"AD_ Printer Status":"Completion"})
+
+grouped = sdf.groupby('Serial')
+
+for name, group in grouped:
+    serial_df = pd.DataFrame(group)
+    st.markdown(f'Serial {name} Dataframe:')
+    st.dataframe(serial_df)
+
+
+st.dataframe(grouped)
+
+#Dataframe of survey results
+
+printer_list = db.collection(location + '/Machines/Printers')
+docs = printer_list.get()
+
+titles = []
+
+for doc in docs:
+    titles.append(doc.to_dict()["Serial"])
+
+st.markdown(titles)
+
+
